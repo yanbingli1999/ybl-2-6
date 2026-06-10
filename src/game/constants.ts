@@ -22,6 +22,30 @@ export const WEATHER_SPEED_MODIFIERS: Record<string, number> = {
   storm: 0.35,
 };
 
+export const WEATHER_BATTERY_MODIFIERS: Record<string, number> = {
+  sunny: 1.0,
+  cloudy: 1.05,
+  rainy: 1.3,
+  heavy_rain: 1.6,
+  storm: 2.0,
+};
+
+export const WEATHER_PATIENCE_MODIFIERS: Record<string, number> = {
+  sunny: 1.0,
+  cloudy: 0.95,
+  rainy: 0.75,
+  heavy_rain: 0.5,
+  storm: 0.3,
+};
+
+export const WEATHER_RAIN_PREMIUM_RATE: Record<string, number> = {
+  sunny: 0,
+  cloudy: 0,
+  rainy: 0.25,
+  heavy_rain: 0.5,
+  storm: 0.8,
+};
+
 export const WEATHER_NAMES: Record<string, string> = {
   sunny: '晴天',
   cloudy: '多云',
@@ -37,6 +61,27 @@ export const WEATHER_COLORS: Record<string, string> = {
   heavy_rain: '#2d3436',
   storm: '#1a1a2e',
 };
+
+export const WEATHER_DESCRIPTIONS: Record<string, string> = {
+  sunny: '阳光明媚，适合出行',
+  cloudy: '多云天气，稍有不便',
+  rainy: '小雨绵绵，请注意安全',
+  heavy_rain: '大雨倾盆，速度大幅下降',
+  storm: '暴雨来袭，请小心驾驶',
+};
+
+export const RAIN_GEAR_COST = 30;
+export const RAIN_GEAR_USES = 3;
+export const RAIN_GEAR_SPEED_BOOST = 0.15;
+export const RAIN_GEAR_BATTERY_REDUCTION = 0.2;
+
+export const WAIT_COST_PER_SECOND = 0.4;
+export const WAIT_STAMINA_DRAIN_PER_SECOND = 0.3;
+export const WAIT_SLOT_DURATION_MIN = 20;
+export const WAIT_SLOT_DURATION_MAX = 45;
+
+export const FORECAST_SLOT_COUNT = 3;
+export const FORECAST_SLOT_DURATION = 35;
 
 export const LATE_PENALTY_RATE = 0.15;
 export const EARLY_BONUS_RATE = 0.1;

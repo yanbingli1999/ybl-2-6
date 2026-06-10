@@ -1,10 +1,12 @@
 import { useShallow } from 'zustand/react/shallow';
 import { useGameStore } from '../store/gameStore';
-import { WEATHER_NAMES, WEATHER_COLORS } from '../game/constants';
+import { WEATHER_NAMES, WEATHER_COLORS, RAIN_GEAR_COST } from '../game/constants';
 import { calculateTotalRating, formatMoney } from '../game/EconomySystem';
-import { Zap, Heart, Wrench, DollarSign, Cloud, Clock, Star } from 'lucide-react';
+import { getWeatherIcon, isRaining } from '../game/WeatherSystem';
+import { Zap, Heart, Wrench, DollarSign, Cloud, Clock, Star, Umbrella, AlertTriangle, TrendingDown } from 'lucide-react';
 
 export default function StatusPanel() {
+  const dispatch = useGameStore((state) => state.dispatch);
   const player = useGameStore((state) => state.player);
   const vehicle = useGameStore((state) => state.vehicle);
   const weather = useGameStore((state) => state.weather);
@@ -21,22 +23,26 @@ export default function StatusPanel() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const formatDuration = (seconds: number) => {
+    const secs = Math.max(0, Math.ceil(seconds));
+    return `${secs}秒`;
+  };
+
   const getProgressClass = (value: number) => {
     if (value < 20) return 'danger';
     if (value < 50) return 'warning';
     return '';
   };
 
-  const weatherIcon = {
-    sunny: '☀️',
-    cloudy: '⛅',
-    rainy: '🌧️',
-    heavy_rain: '⛈️',
-    storm: '🌪️',
-  }[weather.type];
+  const weatherIcon = getWeatherIcon(weather.type);
+  const currentSlotRemaining = weather.nextChangeTime / 1000;
+
+  const handleBuyRainGear = () => {
+    dispatch({ type: 'BUY_RAIN_GEAR' });
+  };
 
   return (
-    <div className="game-card p-4 w-72 space-y-4">
+    <div className="game-card p-4 w-80 space-y-4 max-h-[720px] overflow-y-auto">
       <h3 className="font-pixel text-sm text-game-neon glow-text">状态面板</h3>
 
       <div className="flex items-center gap-2">
@@ -103,17 +109,128 @@ export default function StatusPanel() {
         </div>
       </div>
 
-      <div className="border-t border-game-neon/30 pt-3 space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Cloud size={16} style={{ color: WEATHER_COLORS[weather.type] }} />
-            <span className="font-retro text-lg">{weatherIcon}</span>
+      <div className="border-t border-game-neon/30 pt-3 space-y-3">
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Cloud size={16} style={{ color: WEATHER_COLORS[weather.type] }} />
+              <span className="font-retro text-2xl">{weatherIcon}</span>
+            </div>
+            <div className="text-right">
+              <span className="font-retro text-sm" style={{ color: WEATHER_COLORS[weather.type] }}>
+                {WEATHER_NAMES[weather.type]}
+              </span>
+              <div className="font-retro text-xs text-gray-500">
+                剩余: {formatDuration(currentSlotRemaining)}
+              </div>
+            </div>
           </div>
-          <span className="font-retro text-sm" style={{ color: WEATHER_COLORS[weather.type] }}>
-            {WEATHER_NAMES[weather.type]}
-          </span>
+
+          <div className="bg-game-night/50 rounded p-2 space-y-1 text-xs">
+            <div className="flex justify-between">
+              <span className="text-gray-400 flex items-center gap-1">
+                <TrendingDown size={12} /> 速度影响
+              </span>
+              <span className={`font-retro ${weather.speedModifier < 0.7 ? 'text-game-danger' : weather.speedModifier < 0.9 ? 'text-game-streetLight' : 'text-game-success'}`}>
+                {weather.speedModifier >= 1 ? '正常' : `×${weather.speedModifier.toFixed(2)}`}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400 flex items-center gap-1">
+                <Zap size={12} /> 耗电倍率
+              </span>
+              <span className={`font-retro ${weather.batteryDrainModifier > 1.3 ? 'text-game-danger' : weather.batteryDrainModifier > 1.1 ? 'text-game-streetLight' : 'text-game-success'}`}>
+                ×{weather.batteryDrainModifier.toFixed(2)}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400 flex items-center gap-1">
+                <AlertTriangle size={12} /> 客户耐心
+              </span>
+              <span className={`font-retro ${weather.patienceModifier < 0.6 ? 'text-game-danger' : weather.patienceModifier < 0.85 ? 'text-game-streetLight' : 'text-game-success'}`}>
+                ×{weather.patienceModifier.toFixed(2)}
+              </span>
+            </div>
+          </div>
         </div>
 
+        <div className="bg-game-nightLight/30 border border-game-neon/20 rounded p-2">
+          <div className="font-retro text-xs text-game-neon mb-2 flex items-center gap-1">
+            📡 三段天气预报
+          </div>
+          <div className="space-y-1.5">
+            {weather.forecast.map((slot, index) => {
+              const isCurrent = index === weather.currentSlotIndex;
+              const icon = getWeatherIcon(slot.type);
+              const speedPct = Math.round(slot.effect.speedModifier * 100);
+
+              return (
+                <div
+                  key={index}
+                  className={`flex items-center justify-between p-1.5 rounded text-xs ${
+                    isCurrent
+                      ? 'bg-game-neon/20 border border-game-neon/40'
+                      : 'bg-game-night/30'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`font-retro ${isCurrent ? 'text-game-neon' : 'text-gray-500'}`}>
+                      {isCurrent ? '●现在' : `第${index + 1}段`}
+                    </span>
+                    <span className="text-lg">{icon}</span>
+                    <span className="font-retro" style={{ color: WEATHER_COLORS[slot.type] }}>
+                      {WEATHER_NAMES[slot.type]}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`font-retro ${speedPct < 70 ? 'text-game-danger' : speedPct < 90 ? 'text-game-streetLight' : 'text-gray-400'}`}>
+                      速度{speedPct}%
+                    </span>
+                    <span className="font-retro text-gray-500">
+                      ~{Math.ceil(slot.duration)}s
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Umbrella size={14} className={player.hasRainGear && player.rainGearUsesLeft > 0 ? 'text-blue-400' : 'text-gray-500'} />
+              <span className="font-retro text-sm">雨具状态</span>
+            </div>
+            <span className={`font-retro text-xs ${
+              player.hasRainGear && player.rainGearUsesLeft > 0
+                ? 'text-blue-400'
+                : 'text-gray-500'
+            }`}>
+              {player.hasRainGear && player.rainGearUsesLeft > 0
+                ? `剩余${player.rainGearUsesLeft}次`
+                : '未装备'}
+            </span>
+          </div>
+
+          {isRaining(weather.type) && (!player.hasRainGear || player.rainGearUsesLeft <= 0) && (
+            <button
+              onClick={handleBuyRainGear}
+              disabled={player.money < RAIN_GEAR_COST}
+              className={`w-full pixel-btn text-xs py-1.5 ${
+                player.money < RAIN_GEAR_COST
+                  ? 'opacity-50 cursor-not-allowed bg-gray-700'
+                  : 'bg-blue-600/80 hover:bg-blue-500'
+              }`}
+            >
+              <Umbrella size={12} className="inline mr-1" />
+              购买雨具 ({formatMoney(RAIN_GEAR_COST)})
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="border-t border-game-neon/30 pt-3 space-y-2">
         <div className="flex items-center justify-between">
           <Clock size={14} className="text-gray-400" />
           <span className="font-retro text-sm text-gray-300">{formatTime(gameTime)}</span>
@@ -130,6 +247,11 @@ export default function StatusPanel() {
           <span className="font-retro text-sm text-gray-400">完成订单</span>
           <span className="font-retro text-sm text-game-success">{player.completedOrders}</span>
         </div>
+
+        <div className="flex items-center justify-between">
+          <span className="font-retro text-sm text-gray-400">累计雨天补贴</span>
+          <span className="font-retro text-sm text-blue-400">+{formatMoney(player.totalRainPremium)}</span>
+        </div>
       </div>
 
       {(isCharging || isRepairing || isResting) && (
@@ -137,7 +259,8 @@ export default function StatusPanel() {
           <span className="font-retro text-xs text-game-neon">
             {isCharging && '正在充电中...'}
             {isRepairing && '正在维修中...'}
-            {isResting && '正在休息中...'}
+            {isResting && !player.currentOrderId && '等待天气转好中...'}
+            {isResting && player.currentOrderId && '正在休息中...'}
           </span>
         </div>
       )}

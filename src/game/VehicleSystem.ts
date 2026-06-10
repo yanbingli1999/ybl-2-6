@@ -13,6 +13,7 @@ import {
   PLAYER_START,
 } from './constants';
 import { isOnRoad } from './mapData';
+import { applyRainGearEffect } from './WeatherSystem';
 
 function getRoadTypesAt(
   x: number,
@@ -60,10 +61,11 @@ export function moveVehicle(
   weather: WeatherState,
   deltaTime: number,
   roads: Array<{ id?: string; type?: string; x: number; y: number; width: number; height: number }>,
-  stamina: number
-): { vehicle: VehicleState; moved: boolean; staminaDrain: number } {
+  stamina: number,
+  hasRainGear: boolean = false
+): { vehicle: VehicleState; moved: boolean; staminaDrain: number; extraBatteryDrain: number } {
   if (vehicle.battery <= 0 || stamina <= 0) {
-    return { vehicle: { ...vehicle, speed: 0 }, moved: false, staminaDrain: 0 };
+    return { vehicle: { ...vehicle, speed: 0 }, moved: false, staminaDrain: 0, extraBatteryDrain: 0 };
   }
 
   const currentRoads = getRoadTypesAt(vehicle.position.x, vehicle.position.y, roads);
@@ -76,12 +78,14 @@ export function moveVehicle(
   const canMoveVertical = currentRoads.hasVertical || isAtIntersection;
 
   if ((isHorizontal && !canMoveHorizontal) || (isVertical && !canMoveVertical)) {
-    return { vehicle: { ...vehicle, speed: 0, direction }, moved: false, staminaDrain: 0 };
+    return { vehicle: { ...vehicle, speed: 0, direction }, moved: false, staminaDrain: 0, extraBatteryDrain: 0 };
   }
 
   const durabilityModifier = vehicle.durability / 100;
   const staminaModifier = stamina >= 30 ? 1.0 : stamina / 30;
-  const effectiveSpeed = vehicle.baseSpeed * weather.speedModifier * durabilityModifier * staminaModifier;
+
+  const rainGearModifiers = applyRainGearEffect(weather, hasRainGear);
+  const effectiveSpeed = vehicle.baseSpeed * rainGearModifiers.speedModifier * durabilityModifier * staminaModifier;
 
   let newX = vehicle.position.x;
   let newY = vehicle.position.y;
@@ -106,7 +110,7 @@ export function moveVehicle(
   newY = Math.max(GRID_SIZE / 2, Math.min(newY, 17 * GRID_SIZE - GRID_SIZE / 2));
 
   if (!isOnRoad(newX, newY, roads)) {
-    return { vehicle: { ...vehicle, speed: 0, direction }, moved: false, staminaDrain: 0 };
+    return { vehicle: { ...vehicle, speed: 0, direction }, moved: false, staminaDrain: 0, extraBatteryDrain: 0 };
   }
 
   const newRoads = getRoadTypesAt(newX, newY, roads);
@@ -120,7 +124,10 @@ export function moveVehicle(
     snapX = newRoads.centerX;
   }
 
-  const batteryDrain = BATTERY_DRAIN_RATE * deltaTime * (1 + weather.intensity / 100);
+  const baseBatteryDrain = BATTERY_DRAIN_RATE * deltaTime;
+  const batteryDrain = baseBatteryDrain * rainGearModifiers.batteryDrainModifier;
+  const extraBatteryDrain = Math.max(0, batteryDrain - baseBatteryDrain);
+
   const durabilityDrain = DURABILITY_DRAIN_RATE * deltaTime;
   const staminaDrain = STAMINA_DRAIN_RATE * deltaTime * (1 + weather.intensity / 200);
 
@@ -135,6 +142,7 @@ export function moveVehicle(
     },
     moved: true,
     staminaDrain,
+    extraBatteryDrain,
   };
 }
 

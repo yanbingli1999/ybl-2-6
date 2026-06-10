@@ -1,8 +1,12 @@
-import { Order, IncomeRecord } from './types';
+import { Order, IncomeRecord, WeatherType } from './types';
 import {
   LATE_PENALTY_RATE,
   EARLY_BONUS_RATE,
   URGENCY_BONUS_RATE,
+  WEATHER_RAIN_PREMIUM_RATE,
+  RAIN_GEAR_COST,
+  WAIT_COST_PER_SECOND,
+  CHARGE_COST,
 } from './constants';
 
 export interface SettlementResult {
@@ -11,10 +15,22 @@ export interface SettlementResult {
   details: string[];
 }
 
-export function calculateSettlement(order: Order, playerStamina: number): SettlementResult {
+export function calculateSettlement(
+  order: Order,
+  playerStamina: number,
+  weatherAtCompletion: WeatherType,
+  totalBatteryUsed: number = 0
+): SettlementResult {
   const details: string[] = [];
-  const baseReward = order.reward;
+  const baseReward = order.baseReward;
   details.push(`基础报酬: ¥${baseReward}`);
+
+  const weatherPremium = order.isRainOrder && order.weatherPremium > 0
+    ? Math.floor(baseReward * order.weatherPremium)
+    : 0;
+  if (weatherPremium > 0) {
+    details.push(`雨天加价补贴: +¥${weatherPremium}`);
+  }
 
   const timeRatio = order.deadline / order.maxDeadline;
   let latePenalty = 0;
@@ -46,14 +62,30 @@ export function calculateSettlement(order: Order, playerStamina: number): Settle
     details.push(`体力不足: -¥${staminaPenalty}`);
   }
 
-  let bonus = earlyBonus + urgencyBonus;
-  let finalAmount = baseReward - latePenalty - staminaPenalty + bonus;
+  const waitCost = Math.floor(order.acceptedAfterWait * WAIT_COST_PER_SECOND);
+  if (waitCost > 0) {
+    details.push(`等待天气成本: -¥${waitCost}`);
+  }
+
+  const rainGearCost = order.acceptedWithRainGear ? RAIN_GEAR_COST / 1 : 0;
+  if (rainGearCost > 0) {
+    details.push(`雨具使用费: -¥${Math.floor(rainGearCost)}`);
+  }
+
+  const extraBatteryCost = Math.floor(order.extraBatteryDrain * CHARGE_COST);
+  if (extraBatteryCost > 0) {
+    details.push(`额外耗电成本: -¥${extraBatteryCost}`);
+  }
+
+  let bonus = earlyBonus + urgencyBonus + weatherPremium;
+  let deductions = latePenalty + staminaPenalty + waitCost + Math.floor(rainGearCost) + extraBatteryCost;
+  let finalAmount = baseReward + weatherPremium - latePenalty - staminaPenalty - waitCost - Math.floor(rainGearCost) - extraBatteryCost + earlyBonus + urgencyBonus;
 
   if (finalAmount < 0) {
     finalAmount = 0;
   }
 
-  const rating = calculateRating(timeRatio, order.customerUrgency, latePenalty > 0, playerStamina);
+  const rating = calculateRating(timeRatio, order.customerUrgency, latePenalty > 0, playerStamina, weatherAtCompletion);
   details.push(`客户评分: ${'⭐'.repeat(rating)}`);
 
   const finalDetails = details.join(' | ');
@@ -64,11 +96,17 @@ export function calculateSettlement(order: Order, playerStamina: number): Settle
       orderId: order.id,
       baseReward,
       latePenalty,
-      bonus,
+      bonus: earlyBonus + urgencyBonus,
+      rainPremium: weatherPremium,
+      waitCost,
+      rainGearCost: Math.floor(rainGearCost),
+      extraBatteryCost,
       finalAmount,
       rating,
       completedAt: Date.now(),
       details: finalDetails,
+      weatherAtCompletion,
+      weatherAtAccept: order.weatherTypeAtAccept,
     },
     rating,
     details,
@@ -79,7 +117,8 @@ function calculateRating(
   timeRatio: number,
   urgency: number,
   isLate: boolean,
-  stamina: number
+  stamina: number,
+  weather: WeatherType
 ): number {
   let rating = 3;
 
@@ -103,6 +142,14 @@ function calculateRating(
     rating -= 0.5;
   }
 
+  if (weather === 'storm') {
+    rating += 0.5;
+  } else if (weather === 'heavy_rain') {
+    rating += 0.3;
+  } else if (weather === 'rainy') {
+    rating += 0.2;
+  }
+
   rating = Math.max(1, Math.min(5, rating));
   return Math.round(rating);
 }
@@ -121,4 +168,18 @@ export function getRatingStars(rating: number): string {
   const fullStars = Math.floor(rating);
   const hasHalf = rating % 1 >= 0.5;
   return '⭐'.repeat(fullStars) + (hasHalf ? '☆' : '');
+}
+
+export function getWeatherPremiumRate(weatherType: WeatherType): number {
+  return WEATHER_RAIN_PREMIUM_RATE[weatherType] || 0;
+}
+
+export function calculateExtraBatteryCost(
+  baseBatteryUsed: number,
+  weatherBatteryModifier: number,
+  rainGearActive: boolean
+): number {
+  const extraModifier = rainGearActive ? 0.8 : 1;
+  const modifiedBattery = baseBatteryUsed * weatherBatteryModifier * extraModifier;
+  return Math.max(0, modifiedBattery - baseBatteryUsed);
 }

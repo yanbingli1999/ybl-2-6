@@ -1,4 +1,4 @@
-import { Order, MapData, Position } from './types';
+import { Order, MapData, Position, WeatherType, WeatherState } from './types';
 import {
   MIN_ORDER_REWARD,
   MAX_ORDER_REWARD,
@@ -6,14 +6,17 @@ import {
   MAX_ORDER_DISTANCE,
   LOCATION_NAMES,
   GRID_SIZE,
+  WEATHER_RAIN_PREMIUM_RATE,
 } from './constants';
 import { getNearestRoadPosition } from './mapData';
+import { isRaining } from './WeatherSystem';
 
 export function generateOrder(
   map: MapData,
   playerPos: Position,
   gameTime: number,
-  existingOrders: Order[]
+  existingOrders: Order[],
+  weather?: WeatherState
 ): Order | null {
   const availablePickupPoints = map.chargingStations.concat(map.repairShops);
   
@@ -47,23 +50,38 @@ export function generateOrder(
 
   const clampedDistance = Math.max(MIN_ORDER_DISTANCE, Math.min(MAX_ORDER_DISTANCE, distance));
   const baseReward = Math.floor(MIN_ORDER_REWARD + (clampedDistance / MAX_ORDER_DISTANCE) * (MAX_ORDER_REWARD - MIN_ORDER_REWARD));
-  const reward = baseReward + Math.floor(Math.random() * 20 - 10);
+  const rewardVariance = Math.floor(Math.random() * 20 - 10);
 
+  const currentWeather = weather?.type || 'sunny';
+  const isRainOrder = isRaining(currentWeather);
+  const weatherPremiumRate = isRainOrder ? WEATHER_RAIN_PREMIUM_RATE[currentWeather] || 0 : 0;
+  const weatherPremium = isRainOrder ? Math.floor(baseReward * weatherPremiumRate) : 0;
+  const finalReward = Math.max(MIN_ORDER_REWARD, baseReward + rewardVariance + weatherPremium);
+
+  const weatherPatienceModifier = weather?.patienceModifier || 1.0;
   const estimatedTime = clampedDistance * 1.5;
-  const deadline = estimatedTime + 30;
+  const baseDeadline = estimatedTime + 30;
+  const adjustedDeadline = baseDeadline * weatherPatienceModifier;
   const customerUrgency = Math.floor(Math.random() * 5) + 1;
 
   return {
     id: `order-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     pickupLocation,
     deliveryLocation,
-    reward: Math.max(MIN_ORDER_REWARD, reward),
-    deadline,
-    maxDeadline: deadline,
+    reward: finalReward,
+    baseReward: Math.max(MIN_ORDER_REWARD, baseReward + rewardVariance),
+    deadline: adjustedDeadline,
+    maxDeadline: adjustedDeadline,
     status: 'available',
     customerUrgency,
     distance: clampedDistance,
     createdAt: gameTime,
+    weatherPremium: weatherPremiumRate,
+    isRainOrder,
+    acceptedWithRainGear: false,
+    acceptedAfterWait: 0,
+    extraBatteryDrain: 0,
+    weatherTypeAtAccept: currentWeather,
   };
 }
 
@@ -108,4 +126,14 @@ export function getOrderStatusText(status: Order['status']): string {
 export function getUrgencyText(urgency: number): string {
   const levels = ['', '不急', '正常', '稍急', '紧急', '非常急'];
   return levels[urgency] || '正常';
+}
+
+export function updateOrderExtraBattery(
+  orders: Order[],
+  orderId: string,
+  extraBattery: number
+): Order[] {
+  return orders.map((o) =>
+    o.id === orderId ? { ...o, extraBatteryDrain: o.extraBatteryDrain + extraBattery } : o
+  );
 }

@@ -13,6 +13,12 @@ export interface PlayerState {
   currentOrderId: string | null;
   completedOrders: number;
   totalRating: number;
+  hasRainGear: boolean;
+  rainGearUsesLeft: number;
+  totalWaitCost: number;
+  totalRainGearCost: number;
+  totalRainPremium: number;
+  totalExtraBatteryCost: number;
 }
 
 export interface VehicleState {
@@ -34,21 +40,47 @@ export interface Order {
   pickupLocation: Position & { name: string };
   deliveryLocation: Position & { name: string };
   reward: number;
+  baseReward: number;
   deadline: number;
   maxDeadline: number;
   status: OrderStatus;
   customerUrgency: number;
   distance: number;
   createdAt: number;
+  weatherPremium: number;
+  isRainOrder: boolean;
+  acceptedWithRainGear: boolean;
+  acceptedAfterWait: number;
+  extraBatteryDrain: number;
+  weatherTypeAtAccept: WeatherType;
 }
 
 export type WeatherType = 'sunny' | 'cloudy' | 'rainy' | 'heavy_rain' | 'storm';
+
+export interface WeatherEffect {
+  speedModifier: number;
+  batteryDrainModifier: number;
+  patienceModifier: number;
+  description: string;
+}
+
+export interface WeatherForecastSlot {
+  type: WeatherType;
+  intensity: number;
+  duration: number;
+  effect: WeatherEffect;
+}
 
 export interface WeatherState {
   type: WeatherType;
   intensity: number;
   speedModifier: number;
+  batteryDrainModifier: number;
+  patienceModifier: number;
   nextChangeTime: number;
+  currentSlotIndex: number;
+  forecast: WeatherForecastSlot[];
+  elapsedInSlot: number;
 }
 
 export interface Road {
@@ -95,10 +127,16 @@ export interface IncomeRecord {
   baseReward: number;
   latePenalty: number;
   bonus: number;
+  rainPremium: number;
+  waitCost: number;
+  rainGearCost: number;
+  extraBatteryCost: number;
   finalAmount: number;
   rating: number;
   completedAt: number;
   details: string;
+  weatherAtCompletion: WeatherType;
+  weatherAtAccept: WeatherType;
 }
 
 export interface GameState {
@@ -133,7 +171,7 @@ export interface GameSave {
 
 export type GameAction =
   | { type: 'MOVE'; direction: 'up' | 'down' | 'left' | 'right' }
-  | { type: 'ACCEPT_ORDER'; orderId: string }
+  | { type: 'ACCEPT_ORDER'; orderId: string; withRainGear?: boolean; waitSeconds?: number }
   | { type: 'PICKUP_ORDER'; orderId: string }
   | { type: 'DELIVER_ORDER'; orderId: string }
   | { type: 'START_CHARGING' }
@@ -150,4 +188,8 @@ export type GameAction =
   | { type: 'CLEAR_PATH' }
   | { type: 'NEW_GAME' }
   | { type: 'LOAD_GAME'; save: GameSave }
-  | { type: 'GAME_OVER' };
+  | { type: 'GAME_OVER' }
+  | { type: 'BUY_RAIN_GEAR' }
+  | { type: 'START_WAITING_WEATHER' }
+  | { type: 'STOP_WAITING_WEATHER' }
+  | { type: 'REFRESH_FORECAST' };
