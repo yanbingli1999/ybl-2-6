@@ -5,6 +5,7 @@ import {
   URGENCY_BONUS_RATE,
   WEATHER_RAIN_PREMIUM_RATE,
   RAIN_GEAR_COST,
+  RAIN_GEAR_USES,
   WAIT_COST_PER_SECOND,
   CHARGE_COST,
 } from './constants';
@@ -67,9 +68,13 @@ export function calculateSettlement(
     details.push(`等待天气成本: -¥${waitCost}`);
   }
 
-  const rainGearCost = order.acceptedWithRainGear ? RAIN_GEAR_COST / 1 : 0;
-  if (rainGearCost > 0) {
-    details.push(`雨具使用费: -¥${Math.floor(rainGearCost)}`);
+  let rainGearCostDisplay = 0;
+  if (order.acceptedWithRainGear) {
+    const perUseCost = Math.floor(RAIN_GEAR_COST / RAIN_GEAR_USES);
+    rainGearCostDisplay = perUseCost;
+    if (rainGearCostDisplay > 0) {
+      details.push(`雨具使用费: -¥${rainGearCostDisplay}`);
+    }
   }
 
   const extraBatteryCost = Math.floor(order.extraBatteryDrain * CHARGE_COST);
@@ -77,9 +82,8 @@ export function calculateSettlement(
     details.push(`额外耗电成本: -¥${extraBatteryCost}`);
   }
 
-  let bonus = earlyBonus + urgencyBonus + weatherPremium;
-  let deductions = latePenalty + staminaPenalty + waitCost + Math.floor(rainGearCost) + extraBatteryCost;
-  let finalAmount = baseReward + weatherPremium - latePenalty - staminaPenalty - waitCost - Math.floor(rainGearCost) - extraBatteryCost + earlyBonus + urgencyBonus;
+  let bonus = earlyBonus + urgencyBonus;
+  let finalAmount = baseReward + weatherPremium - latePenalty - staminaPenalty - waitCost - extraBatteryCost + earlyBonus + urgencyBonus;
 
   if (finalAmount < 0) {
     finalAmount = 0;
@@ -99,7 +103,7 @@ export function calculateSettlement(
       bonus: earlyBonus + urgencyBonus,
       rainPremium: weatherPremium,
       waitCost,
-      rainGearCost: Math.floor(rainGearCost),
+      rainGearCost: rainGearCostDisplay,
       extraBatteryCost,
       finalAmount,
       rating,

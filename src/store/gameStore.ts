@@ -149,6 +149,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         rainGearUsesLeft: withRainGear ? newRainGearUses : state.player.rainGearUsesLeft,
         totalWaitCost,
         totalRainGearCost,
+        currentOrderId: action.orderId,
       };
 
       const path = findPath(
